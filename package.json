@@ -1,0 +1,47 @@
+{
+  "name": "cross-poster-sdk",
+  "version": "1.0.0",
+  "description": "Zero-dependency multi-SNS cross-posting SDK (X, Mastodon, Bluesky, Misskey, Threads) with DNS-rebinding-safe SSRF protection for federated instances and AES-256-GCM credential envelopes.",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.mjs"
+    }
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "sideEffects": false,
+  "keywords": [
+    "cross-post",
+    "social-media",
+    "x",
+    "twitter",
+    "mastodon",
+    "bluesky",
+    "atproto",
+    "misskey",
+    "threads",
+    "fediverse",
+    "ssrf-protection",
+    "dns-rebinding",
+    "zero-dependencies"
+  ],
+  "author": "takaodev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/takaodev/cross-poster-sdk.git"
+  }
+}
