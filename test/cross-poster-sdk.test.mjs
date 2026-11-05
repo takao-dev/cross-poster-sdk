@@ -10,8 +10,12 @@ import {
   isUnsafeAddress,
   normalizeInstanceUrl,
   postToService,
+  postThreadToService,
+  countServiceCharacters,
+  splitPostIntoThreads,
   SUPPORTED_SERVICES,
   SERVICE_LABELS,
+  SERVICE_LIMITS,
 } from '../src/index.mjs';
 
 test('exposes supported services and display labels', () => {
@@ -130,4 +134,59 @@ test('throws on unsupported service names', async () => {
     () => deleteFromService({ service: 'unsupported', credentials: {} }, 'id123'),
     /削除サービスが不正/
   );
+});
+
+test('countServiceCharacters accurately measures service-specific character weights', () => {
+  // X: ASCII is 1, CJK is 2, URL is 23
+  assert.equal(countServiceCharacters('x', 'hello'), 5);
+  assert.equal(countServiceCharacters('x', 'こんにちは'), 10);
+  assert.equal(countServiceCharacters('x', 'Visit https://example.com/test today!'), 6 + 23 + 7);
+
+  // Bluesky: 300 grapheme clusters
+  assert.equal(countServiceCharacters('bluesky', 'Hello 🚀'), 7);
+
+  // Mastodon: code points
+  assert.equal(countServiceCharacters('mastodon', 'Fediverse 🎉'), 11);
+  assert.equal(SERVICE_LIMITS.mastodon, 500);
+});
+
+test('splitPostIntoThreads divides long posts with numbering indicators', () => {
+  const shortText = 'Short announcement';
+  assert.deepEqual(splitPostIntoThreads('bluesky', shortText), [shortText]);
+
+  const longText = 'First paragraph describing a major product announcement with lots of interesting details, technical architecture notes, and security disclosures.\n\nSecond paragraph following up with release dates, step-by-step instructions, migration guides, and community forum links.\n\nThird paragraph concluding with deep thank-you remarks to everyone involved across all engineering and design teams.';
+  const threads = splitPostIntoThreads('x', longText);
+  assert.ok(threads.length >= 2);
+  assert.ok(threads[0].endsWith(`(1/${threads.length})`));
+  assert.ok(threads[threads.length - 1].endsWith(`(${threads.length}/${threads.length})`));
+
+  for (const chunk of threads) {
+    assert.ok(countServiceCharacters('x', chunk) <= SERVICE_LIMITS.x);
+  }
+});
+
+test('postThreadToService threads multiple sequential replies', async () => {
+  const postedBodies = [];
+  const mockRequest = async (url, options) => {
+    postedBodies.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { id: `tweet_${postedBodies.length}` } }),
+    };
+  };
+
+  const account = { service: 'x', credentials: { accessToken: 'token' } };
+  const thread = ['Post 1', 'Post 2', 'Post 3'];
+  const results = await postThreadToService(account, thread, { requestImpl: mockRequest });
+
+  assert.equal(results.length, 3);
+  assert.equal(results[0].remoteId, 'tweet_1');
+  assert.equal(results[1].remoteId, 'tweet_2');
+  assert.equal(results[2].remoteId, 'tweet_3');
+
+  // Verify first post has no reply, but subsequent posts link to previous
+  assert.equal(postedBodies[0].reply, undefined);
+  assert.deepEqual(postedBodies[1].reply, { in_reply_to_tweet_id: 'tweet_1' });
+  assert.deepEqual(postedBodies[2].reply, { in_reply_to_tweet_id: 'tweet_2' });
 });

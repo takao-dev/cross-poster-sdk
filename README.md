@@ -163,6 +163,36 @@ console.log(result);
 
 ---
 
+## 🧵 Thread Splitting & Sequential Posting
+
+Different networks enforce different character counting rules (X counts CJK as 2 and URLs as 23; Bluesky counts Grapheme Clusters; Mastodon counts code points). `cross-poster-sdk` provides built-in calculators, natural text splitters with numbering indicators `(1/N)`, and sequential chained thread posting:
+
+```typescript
+import {
+  countServiceCharacters,
+  splitPostIntoThreads,
+  postThreadToService
+} from 'cross-poster-sdk';
+
+const myLongArticle = `Very long update text...`;
+
+// 1. Measure character weight for specific platform
+const xLength = countServiceCharacters('x', myLongArticle);
+
+// 2. Automatically split into numbered threads safe for the platform limits
+const xThreads = splitPostIntoThreads('x', myLongArticle, { numbering: true });
+// -> ['Paragraph 1... (1/3)', 'Paragraph 2... (2/3)', 'Paragraph 3... (3/3)']
+
+// 3. Post sequentially as linked reply thread
+const threadResults = await postThreadToService(
+  { service: 'x', credentials: { accessToken: 'token' } },
+  xThreads
+);
+console.log('Thread published! Root ID:', threadResults[0].remoteId);
+```
+
+---
+
 ## TypeScript Support
 
 Complete TypeScript declarations are bundled in `./src/index.d.ts`. Types for `CrossPosterAccount`, `SupportedService`, `PostOptions`, and `PostResult` are exported automatically.

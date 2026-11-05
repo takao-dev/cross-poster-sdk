@@ -9,6 +9,23 @@ export declare const SUPPORTED_SERVICES: ReadonlySet<SupportedService>;
 
 export declare const SERVICE_LABELS: Record<SupportedService, string>;
 
+export declare const SERVICE_LIMITS: Record<SupportedService, number>;
+
+export interface SplitPostOptions {
+  numbering?: boolean;
+}
+
+export declare function countServiceCharacters(
+  service: SupportedService,
+  text: string
+): number;
+
+export declare function splitPostIntoThreads(
+  service: SupportedService,
+  text: string,
+  options?: SplitPostOptions
+): string[];
+
 export interface XCredentials {
   accessToken: string;
 }
@@ -45,6 +62,10 @@ export interface CrossPosterAccount {
 
 export interface PostOptions {
   dryRun?: boolean;
+  replyToId?: string | null;
+  replyRoot?: string | null;
+  replyRootCid?: string | null;
+  replyParentCid?: string | null;
   requestImpl?: (
     url: string,
     options: {
@@ -120,3 +141,9 @@ export declare function deleteFromService(
   remoteId: string,
   options?: PostOptions
 ): Promise<DeleteResult>;
+
+export declare function postThreadToService(
+  account: CrossPosterAccount,
+  posts: string[],
+  options?: PostOptions
+): Promise<PostResult[]>;

@@ -15,6 +15,121 @@ export const SERVICE_LABELS = {
   threads: 'Threads',
 };
 
+export const SERVICE_LIMITS = {
+  x: 280,
+  mastodon: 500,
+  bluesky: 300,
+  threads: 500,
+  misskey: 3000,
+};
+
+export function countServiceCharacters(service, text) {
+  const str = String(text || '');
+  if (service === 'x') {
+    // X Twitter: CJK / fullwidth = 2, ASCII = 1, URLs = 23
+    let count = 0;
+    const urlRegex = /https?:\/\/[^\s]+/g;
+    const cleanText = str.replace(urlRegex, () => {
+      count += 23;
+      return '';
+    });
+    for (const char of cleanText) {
+      const code = char.codePointAt(0);
+      if (
+        (code >= 0x1100 && code <= 0x115f) ||
+        (code >= 0x2e80 && code <= 0xa4cf) ||
+        (code >= 0xac00 && code <= 0xd7a3) ||
+        (code >= 0xf900 && code <= 0xfaff) ||
+        (code >= 0xfe10 && code <= 0xfe19) ||
+        (code >= 0xfe30 && code <= 0xfe6f) ||
+        (code >= 0xff00 && code <= 0xff60) ||
+        (code >= 0xffe0 && code <= 0xffe6) ||
+        (code >= 0x20000 && code <= 0x2fffd) ||
+        (code >= 0x30000 && code <= 0x3fffd)
+      ) {
+        count += 2;
+      } else {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  if (service === 'bluesky') {
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+      const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+      return Array.from(segmenter.segment(str)).length;
+    }
+    return Array.from(str).length;
+  }
+
+  // Mastodon, Threads, Misskey: Unicode code point count
+  return Array.from(str).length;
+}
+
+export function splitPostIntoThreads(service, text, options = {}) {
+  const limit = SERVICE_LIMITS[service] || 300;
+  const numbering = options.numbering !== false;
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+
+  if (countServiceCharacters(service, raw) <= limit) {
+    return [raw];
+  }
+
+  const paragraphs = raw.split(/\n\n+/);
+  const chunks = [];
+  let current = '';
+
+  for (const para of paragraphs) {
+    const candidate = current ? `${current}\n\n${para}` : para;
+    if (countServiceCharacters(service, candidate) <= limit - (numbering ? 8 : 0)) {
+      current = candidate;
+    } else {
+      if (current) chunks.push(current);
+      if (countServiceCharacters(service, para) > limit - (numbering ? 8 : 0)) {
+        const sentences = para.split(/(?<=[。．.！？!?\n])\s*/);
+        let sub = '';
+        for (const s of sentences) {
+          const subCand = sub ? `${sub} ${s}` : s;
+          if (countServiceCharacters(service, subCand) <= limit - (numbering ? 8 : 0)) {
+            sub = subCand;
+          } else {
+            if (sub) chunks.push(sub);
+            if (countServiceCharacters(service, s) > limit - (numbering ? 8 : 0)) {
+              let remaining = s;
+              while (remaining) {
+                let sliceLen = limit - (numbering ? 10 : 0);
+                while (sliceLen > 0 && countServiceCharacters(service, remaining.slice(0, sliceLen)) > limit - (numbering ? 10 : 0)) {
+                  sliceLen--;
+                }
+                if (sliceLen <= 0) sliceLen = 1;
+                chunks.push(remaining.slice(0, sliceLen));
+                remaining = remaining.slice(sliceLen);
+              }
+              sub = '';
+            } else {
+              sub = s;
+            }
+          }
+        }
+        if (sub) chunks.push(sub);
+        current = '';
+      } else {
+        current = para;
+      }
+    }
+  }
+  if (current) chunks.push(current);
+
+  if (!numbering || chunks.length <= 1) {
+    return chunks;
+  }
+
+  const total = chunks.length;
+  return chunks.map((chunk, idx) => `${chunk} (${idx + 1}/${total})`);
+}
+
 export function normalizeInstanceUrl(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -229,26 +344,38 @@ export async function postToService(account, text, options = {}) {
   const reqOpts = options.requestImpl ? { requestImpl: options.requestImpl } : {};
   switch (account.service) {
     case 'x': {
+      const payload = { text };
+      if (options.replyToId) {
+        payload.reply = { in_reply_to_tweet_id: options.replyToId };
+      }
       const body = await fetchJson('https://api.x.com/2/tweets', {
         ...reqOpts,
         method: 'POST',
         headers: { Authorization: `Bearer ${credentials.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(payload),
       });
       return { remoteId: body.data?.id || null };
     }
     case 'mastodon': {
       const instanceUrl = normalizeInstanceUrl(account.instanceUrl);
-      const body = await formRequest(`${instanceUrl}/api/v1/statuses`, { status: text }, { ...reqOpts, headers: { Authorization: `Bearer ${credentials.accessToken}` } });
+      const form = { status: text };
+      if (options.replyToId) {
+        form.in_reply_to_id = options.replyToId;
+      }
+      const body = await formRequest(`${instanceUrl}/api/v1/statuses`, form, { ...reqOpts, headers: { Authorization: `Bearer ${credentials.accessToken}` } });
       return { remoteId: body.id || null };
     }
     case 'misskey': {
       const instanceUrl = normalizeInstanceUrl(account.instanceUrl);
+      const payload = { i: credentials.accessToken, text };
+      if (options.replyToId) {
+        payload.replyId = options.replyToId;
+      }
       const body = await fetchJson(`${instanceUrl}/api/notes/create`, {
         ...reqOpts,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ i: credentials.accessToken, text }),
+        body: JSON.stringify(payload),
       });
       return { remoteId: body.createdNote?.id || null };
     }
@@ -259,26 +386,63 @@ export async function postToService(account, text, options = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: credentials.username, password: credentials.appPassword }),
       });
-      const record = await fetchJson('https://bsky.social/xrpc/com.atproto.repo.createRecord', {
+      const record = {
+        '$type': 'app.bsky.feed.post',
+        text,
+        createdAt: new Date().toISOString(),
+      };
+      if (options.replyToId) {
+        record.reply = {
+          root: { uri: options.replyRoot || options.replyToId, cid: options.replyRootCid || 'bafyreie546fudph4' },
+          parent: { uri: options.replyToId, cid: options.replyParentCid || 'bafyreie546fudph4' },
+        };
+      }
+      const postRecord = await fetchJson('https://bsky.social/xrpc/com.atproto.repo.createRecord', {
         ...reqOpts,
         method: 'POST',
         headers: { Authorization: `Bearer ${session.accessJwt}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repo: session.did || credentials.username,
           collection: 'app.bsky.feed.post',
-          record: { '$type': 'app.bsky.feed.post', text, createdAt: new Date().toISOString() },
+          record,
         }),
       });
-      return { remoteId: record.uri || null };
+      return { remoteId: postRecord.uri || null };
     }
     case 'threads': {
-      const container = await formRequest('https://graph.threads.com/v1.0/me/threads', { media_type: 'TEXT', text, access_token: credentials.accessToken }, reqOpts);
+      const form = { media_type: 'TEXT', text, access_token: credentials.accessToken };
+      if (options.replyToId) {
+        form.reply_to_id = options.replyToId;
+      }
+      const container = await formRequest('https://graph.threads.com/v1.0/me/threads', form, reqOpts);
       const published = await formRequest('https://graph.threads.com/v1.0/me/threads_publish', { creation_id: container.id, access_token: credentials.accessToken }, reqOpts);
       return { remoteId: published.id || container.id || null };
     }
     default:
       throw new Error('投稿サービスが不正です。');
   }
+}
+
+export async function postThreadToService(account, posts, options = {}) {
+  const results = [];
+  let lastRemoteId = null;
+  let blueskyRootUri = null;
+
+  for (let i = 0; i < posts.length; i++) {
+    const text = posts[i];
+    const postOptions = {
+      ...options,
+      ...(lastRemoteId ? { replyToId: lastRemoteId } : {}),
+      ...(blueskyRootUri ? { replyRoot: blueskyRootUri } : {}),
+    };
+    const res = await postToService(account, text, postOptions);
+    results.push(res);
+    lastRemoteId = res.remoteId;
+    if (account.service === 'bluesky' && i === 0 && res.remoteId) {
+      blueskyRootUri = res.remoteId;
+    }
+  }
+  return results;
 }
 
 export async function deleteFromService(account, remoteId, options = {}) {
