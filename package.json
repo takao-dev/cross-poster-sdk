@@ -1,6 +1,6 @@
 {
   "name": "cross-poster-sdk",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Zero-dependency multi-SNS cross-posting SDK (X, Mastodon, Bluesky, Misskey, Threads) with DNS-rebinding-safe SSRF protection for federated instances and AES-256-GCM credential envelopes.",
   "type": "module",
   "main": "./src/index.mjs",
