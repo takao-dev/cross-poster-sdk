@@ -22,7 +22,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "test:coverage": "node -e \"require('node:fs').mkdirSync('coverage', {recursive: true})\" && node --test --experimental-test-coverage --test-reporter=spec --test-reporter=lcov --test-reporter-destination=stdout --test-reporter-destination=coverage/lcov.info"
+    "test:coverage": "node -e \"require('node:fs').mkdirSync('coverage', {recursive: true})\" && node --test --experimental-test-coverage --test-reporter=spec --test-reporter=lcov --test-reporter=junit --test-reporter-destination=stdout --test-reporter-destination=coverage/lcov.info --test-reporter-destination=coverage/junit.xml"
   },
   "sideEffects": false,
   "keywords": [
