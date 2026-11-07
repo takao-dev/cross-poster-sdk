@@ -1,6 +1,6 @@
 # cross-poster-sdk
 
-[![CI](https://github.com/takaodev/cross-poster-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/takaodev/cross-poster-sdk/actions/workflows/ci.yml)
+[![CI](https://github.com/takao-dev/cross-poster-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/takao-dev/cross-poster-sdk/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/cross-poster-sdk.svg)](https://www.npmjs.com/package/cross-poster-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
@@ -182,4 +182,4 @@ console.log(dryResult);
 
 ## 📄 ライセンス
 
-MIT License © 2026 takaodev
+MIT License © 2026 takao-dev

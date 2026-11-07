@@ -1,6 +1,6 @@
 # cross-poster-sdk
 
-[![CI](https://github.com/takaodev/cross-poster-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/takaodev/cross-poster-sdk/actions/workflows/ci.yml)
+[![CI](https://github.com/takao-dev/cross-poster-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/takao-dev/cross-poster-sdk/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/cross-poster-sdk.svg)](https://www.npmjs.com/package/cross-poster-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
@@ -201,4 +201,4 @@ Complete TypeScript declarations are bundled in `./src/index.d.ts`. Types for `C
 
 ## License
 
-MIT © [takaodev](https://github.com/takaodev)
+MIT © [takao-dev](https://github.com/takao-dev)

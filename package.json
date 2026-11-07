@@ -39,10 +39,10 @@
     "dns-rebinding",
     "zero-dependencies"
   ],
-  "author": "takaodev",
+  "author": "takao-dev",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/takaodev/cross-poster-sdk.git"
+    "url": "git+https://github.com/takao-dev/cross-poster-sdk.git"
   }
 }
