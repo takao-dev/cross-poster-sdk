@@ -21,7 +21,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:coverage": "node -e \"require('node:fs').mkdirSync('coverage', {recursive: true})\" && node --test --experimental-test-coverage --test-reporter=spec --test-reporter=lcov --test-reporter-destination=stdout --test-reporter-destination=coverage/lcov.info"
   },
   "sideEffects": false,
   "keywords": [
