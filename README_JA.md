@@ -1,6 +1,7 @@
 # cross-poster-sdk
 
 [![CI](https://github.com/takao-dev/cross-poster-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/takao-dev/cross-poster-sdk/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/takao-dev/cross-poster-sdk/branch/main/graph/badge.svg)](https://codecov.io/gh/takao-dev/cross-poster-sdk)
 [![npm version](https://img.shields.io/npm/v/cross-poster-sdk.svg)](https://www.npmjs.com/package/cross-poster-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
