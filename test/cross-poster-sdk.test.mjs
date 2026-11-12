@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import https from 'node:https';
+import { EventEmitter } from 'node:events';
 import { randomBytes } from 'node:crypto';
 import test from 'node:test';
 import {
@@ -13,6 +15,7 @@ import {
   postThreadToService,
   countServiceCharacters,
   splitPostIntoThreads,
+  requestExternal,
   SUPPORTED_SERVICES,
   SERVICE_LABELS,
   SERVICE_LIMITS,
@@ -189,4 +192,177 @@ test('postThreadToService threads multiple sequential replies', async () => {
   assert.equal(postedBodies[0].reply, undefined);
   assert.deepEqual(postedBodies[1].reply, { in_reply_to_tweet_id: 'tweet_1' });
   assert.deepEqual(postedBodies[2].reply, { in_reply_to_tweet_id: 'tweet_2' });
+});
+
+test('postThreadToService handles Bluesky, Mastodon, Misskey, and Threads threading', async () => {
+  // Bluesky
+  const bskyBodies = [];
+  const bskyMock = async (url, options) => {
+    if (url.includes('createSession')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ did: 'did:plc:test', accessJwt: 'jwt' }) };
+    }
+    const b = JSON.parse(options.body);
+    bskyBodies.push(b);
+    return { ok: true, status: 200, text: async () => JSON.stringify({ uri: `at://did:plc:test/post_${bskyBodies.length}` }) };
+  };
+  const bskyAccount = { service: 'bluesky', credentials: { username: 'u', appPassword: 'p' } };
+  const bskyRes = await postThreadToService(bskyAccount, ['B1', 'B2'], { requestImpl: bskyMock });
+  assert.equal(bskyRes.length, 2);
+  assert.equal(bskyBodies[0].record.reply, undefined);
+  assert.ok(bskyBodies[1].record.reply);
+  assert.equal(bskyBodies[1].record.reply.root.uri, 'at://did:plc:test/post_1');
+  assert.equal(bskyBodies[1].record.reply.parent.uri, 'at://did:plc:test/post_1');
+
+  // Mastodon
+  const mastoForms = [];
+  const mastoMock = async (url, options) => {
+    mastoForms.push(options.body.toString());
+    return { ok: true, status: 200, text: async () => JSON.stringify({ id: `m_${mastoForms.length}` }) };
+  };
+  const mastoAccount = { service: 'mastodon', instanceUrl: 'https://mastodon.social', credentials: { accessToken: 't' } };
+  const mastoRes = await postThreadToService(mastoAccount, ['M1', 'M2'], { requestImpl: mastoMock });
+  assert.equal(mastoRes.length, 2);
+  assert.ok(!mastoForms[0].includes('in_reply_to_id'));
+  assert.ok(mastoForms[1].includes('in_reply_to_id=m_1'));
+
+  // Misskey
+  const misskeyBodies = [];
+  const misskeyMock = async (url, options) => {
+    misskeyBodies.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ createdNote: { id: `mk_${misskeyBodies.length}` } }) };
+  };
+  const misskeyAccount = { service: 'misskey', instanceUrl: 'https://misskey.io', credentials: { accessToken: 't' } };
+  const misskeyRes = await postThreadToService(misskeyAccount, ['MK1', 'MK2'], { requestImpl: misskeyMock });
+  assert.equal(misskeyRes.length, 2);
+  assert.equal(misskeyBodies[0].replyId, undefined);
+  assert.equal(misskeyBodies[1].replyId, 'mk_1');
+
+  // Threads
+  const threadsForms = [];
+  const threadsMock = async (url, options) => {
+    threadsForms.push(options.body ? options.body.toString() : '');
+    return { ok: true, status: 200, text: async () => JSON.stringify({ id: `th_${threadsForms.length}` }) };
+  };
+  const threadsAccount = { service: 'threads', credentials: { accessToken: 't' } };
+  const threadsRes = await postThreadToService(threadsAccount, ['TH1', 'TH2'], { requestImpl: threadsMock });
+  assert.equal(threadsRes.length, 2);
+  assert.ok(threadsForms.some(f => f.includes('reply_to_id=')));
+});
+
+test('splitPostIntoThreads edge cases and slicing', () => {
+  // Empty
+  assert.deepEqual(splitPostIntoThreads('bluesky', ''), []);
+  assert.deepEqual(splitPostIntoThreads('bluesky', '   '), []);
+
+  // numbering: false
+  const unnumbered = splitPostIntoThreads('x', 'A'.repeat(200) + '\n\n' + 'B'.repeat(200), { numbering: false });
+  assert.equal(unnumbered.length, 2);
+  assert.ok(!unnumbered[0].includes('(1/'));
+
+  // Sentence split and deep slice of a long single word
+  const longSentence = 'Short start. ' + '極'.repeat(300) + ' End.';
+  const chunks = splitPostIntoThreads('x', longSentence);
+  assert.ok(chunks.length > 1);
+  for (const c of chunks) {
+    assert.ok(countServiceCharacters('x', c) <= SERVICE_LIMITS.x);
+  }
+
+  // Paragraph with multiple sentences where second sentence fits into next sub chunk
+  const multiSentencePara = 'A'.repeat(200) + '. ' + 'B'.repeat(100) + '.';
+  const splitSentences = splitPostIntoThreads('x', multiSentencePara);
+  assert.equal(splitSentences.length, 2);
+});
+
+test('countServiceCharacters fallbacks when Intl.Segmenter is absent', () => {
+  const originalSegmenter = Intl.Segmenter;
+  try {
+    delete Intl.Segmenter;
+    assert.equal(countServiceCharacters('bluesky', 'Hello World 🚀'), 13);
+  } finally {
+    Intl.Segmenter = originalSegmenter;
+  }
+});
+
+test('resolveSafeExternalUrl and assertSafeExternalUrl error handling', async () => {
+  // Valid URL passes assertSafeExternalUrl
+  const parsed = await assertSafeExternalUrl('https://mastodon.social/api/v1');
+  assert.equal(parsed.hostname, 'mastodon.social');
+
+  // Invalid URL format
+  await assert.rejects(() => assertSafeExternalUrl('not a valid url'), /外部URLが不正/);
+
+  // Unresolvable domain
+  await assert.rejects(() => assertSafeExternalUrl('https://non-existent-domain-xyz-404-safe.org'), /ホストを解決できません/);
+});
+
+test('fetchJson handles API error messages and non-JSON error payloads', async () => {
+  const mockErrApi = async () => ({
+    ok: false,
+    status: 400,
+    text: async () => JSON.stringify({ error: { message: 'Bad request message' } }),
+  });
+  await assert.rejects(
+    () => postToService({ service: 'x', credentials: { accessToken: 't' } }, 'test', { requestImpl: mockErrApi }),
+    /Bad request message/
+  );
+
+  const mockHtmlErr = async () => ({
+    ok: false,
+    status: 502,
+    text: async () => '<html>502 Bad Gateway</html>',
+  });
+  await assert.rejects(
+    () => postToService({ service: 'x', credentials: { accessToken: 't' } }, 'test', { requestImpl: mockHtmlErr }),
+    /外部APIエラー \(502\)/
+  );
+});
+
+test('requestExternal performs safe HTTPS requests with size limit guard', async () => {
+  const originalRequest = https.request;
+  try {
+    // 1. Successful request
+    https.request = (options, cb) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        cb(res);
+        res.emit('data', Buffer.from('{"status":"ok"}'));
+        res.emit('end');
+      };
+      return req;
+    };
+
+    const res = await requestExternal('https://mastodon.social/test', {
+      method: 'POST',
+      body: 'payload',
+    });
+    assert.equal(res.ok, true);
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), '{"status":"ok"}');
+
+    // 2. Request exceeding 2MB is destroyed
+    https.request = (options, cb) => {
+      const req = new EventEmitter();
+      req.destroy = (err) => {
+        req.emit('error', err);
+      };
+      req.write = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        cb(res);
+        res.emit('data', Buffer.alloc(2 * 1024 * 1024 + 100));
+      };
+      return req;
+    };
+
+    await assert.rejects(
+      () => requestExternal('https://mastodon.social/oversized'),
+      /外部APIレスポンスが大きすぎます/
+    );
+  } finally {
+    https.request = originalRequest;
+  }
 });
