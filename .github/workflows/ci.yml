@@ -36,8 +36,9 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22.x'
         env:
           BUNDLE_ANALYZER_UPLOAD_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          BUNDLE_NAME: ${{ github.event.repository.name }}
         run: |
-          npx --yes @codecov/bundle-analyzer ./src --bundle-name=${{ github.event.repository.name }} || true
+          npx --yes @codecov/bundle-analyzer ./src "--bundle-name=$BUNDLE_NAME" || true
 
       - name: Run test suite (with coverage)
         if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22.x'

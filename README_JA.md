@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/cross-poster-sdk.svg)](https://www.npmjs.com/package/cross-poster-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-> **X（Twitter）、Mastodon、Bluesky（AT Protocol）、Misskey、Meta Threads に対応したゼロ依存マルチSNSクロスポストSDK。DNSリバインディング完全耐性を持つSSRF防御と、AES-256-GCM 資格情報暗号化エンベロープを内蔵。**
+> **X（Twitter）、Mastodon、Bluesky（AT Protocol）、Misskey、Meta Threads 向けのゼロ依存クロスポストSDK。SSRF対策とAES-256-GCM資格情報エンベロープを備えます。**
 
 [English README is available here](./README.md)
 
@@ -15,17 +15,17 @@
 
 分散型SNS（Mastodon, Misskey）と中央集権型SNS（X, Bluesky, Threads）を横断してクロスポストするシステムを構築する場合、深刻なセキュリティリスクと複雑さに直面します：
 
-1. **悪意あるインスタンスURLによる SSRF ＆ クラウド認証情報窃取**:
-   ユーザーが自由に入力できるインスタンスドメイン（`https://my-instance.com`）が悪意を持って内部ネットワークやクラウドのメタデータエンドポイント（`169.254.169.254`）に向けられていた場合、サーバーの機密情報や IAM 認証情報が即座に奪われます。
+1. **カスタムインスタンスの接続先と資格情報**:
+   このSDKはプライベート・予約済みIPアドレスへの接続を拒否し、検証したDNS結果を接続に固定します。一方、アプリが利用者にインスタンスURLの変更を許し、保存済みアカウントのトークンをそのまま使うと、トークンが選択された公開ホストに送信されます。アカウントごとにインスタンスURLと資格情報を結び付け、所有者が信頼する接続先だけを許可してください。悪意ある公開サーバーへの資格情報送信はSSRF対策では防げません。
 2. **DNS リバインディング攻撃（TOCTOU）の脅威**:
    URL検証時に正規のパブリックIPを返し、HTTP接続確立時のミリ秒で内部IP（`127.0.0.1` や `169.254.169.254`）を返すDNSリバインディング攻撃に対し、一般的な `fetch()` や `axios` では防御が極めて困難です。
 3. **API仕様と文字数計算の断片化**:
    X (全角2/半角1/URL23), Bluesky (Grapheme Clusters), Mastodon (Code points) など、各社で異なる文字数制限やスレッド構造の処理。
 
-`cross-poster-sdk` はこれらをゼロ依存で完全に解決します：
+`cross-poster-sdk` は、以下の機能でこれらのリスクを抑えます：
 
-- **DNSリバインディング完全耐性を持つ SSRF 防御**:
-  プライベートIP、リンクローカル、CGNAT、ループバック、クラウドメタデータ、IPv4射影IPv6、6to4を完全遮断。DNS解決した安全なIPアドレスを **Node.js の TLS ソケットの `lookup` コールバックに直接ピン留め** するため、DNSのTTL改ざんによるすり替えが物理的に不可能です。
+- **SSRF対策**:
+  プライベート・予約済みIPv4/IPv6アドレスを検査し、検証したIPアドレスを **Node.js の TLS ソケットの `lookup` コールバックに固定** します。検査した接続でのDNSリバインディングリスクを下げますが、プロバイダーの許可リストや、信頼できない公開ホストへ送られる資格情報の保護を提供するものではありません。
 - **統一 5-Network アダプター**:
   `postToService` / `deleteFromService` の単一インターフェースで、5大SNSへの投稿・削除を網羅。
 - **各社仕様に忠実な文字数カウンター ＆ 自動スレッド分割**:
@@ -176,7 +176,7 @@ console.log(dryResult);
      ▼
 [IPピン留め]  ── 検証を通過した IP を TLS ソケットの lookup フックに直接固定
                  接続確立時の DNS 再問い合わせを発生させないため
-                 DNSリバインディング攻撃は成立しません。
+                 検査した接続での DNS リバインディングリスクを低減
 ```
 
 ---

@@ -4,11 +4,12 @@
 [![codecov](https://codecov.io/gh/takao-dev/cross-poster-sdk/branch/main/graph/badge.svg)](https://codecov.io/gh/takao-dev/cross-poster-sdk)
 [![CodeQL](https://github.com/takao-dev/cross-poster-sdk/actions/workflows/codeql.yml/badge.svg)](https://github.com/takao-dev/cross-poster-sdk/actions/workflows/codeql.yml)
 [![npm version](https://img.shields.io/npm/v/cross-poster-sdk.svg)](https://www.npmjs.com/package/cross-poster-sdk)
+[![npm downloads](https://img.shields.io/npm/dw/cross-poster-sdk.svg)](https://www.npmjs.com/package/cross-poster-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-> **Zero-dependency, multi-SNS cross-posting SDK for X (Twitter), Mastodon, Bluesky (AT Protocol), Misskey, and Meta Threads, engineered with DNS-rebinding-safe SSRF defense and AES-256-GCM credential envelopes.**
+> **Zero-dependency cross-posting SDK for X (Twitter), Mastodon, Bluesky (AT Protocol), Misskey, and Meta Threads, with SSRF safeguards and AES-256-GCM credential envelopes.**
 
-Cross-posting across federated (Mastodon, Misskey) and centralized (X, Bluesky, Threads) networks introduces severe security hazards: users supply arbitrary instance domains that can target internal cloud metadata endpoints (`169.254.169.254`) or trigger DNS rebinding attacks. `cross-poster-sdk` provides an all-in-one unified cross-posting pipeline with rock-solid security defaults and **zero external npm dependencies**.
+Federated networks accept custom instance domains, which creates SSRF and credential-routing risks. This SDK rejects private and reserved destination addresses and pins validated DNS results for the request. If an application lets an untrusted user change an instance URL while reusing a stored account token, that token can be sent to the selected public host. Keep each account's instance URL bound to its credentials and allow only destinations trusted by the account owner. These controls do not make a malicious public server trustworthy.
 
 ---
 
@@ -16,8 +17,8 @@ Cross-posting across federated (Mastodon, Misskey) and centralized (X, Bluesky, 
 
 - **Unified 5-Network Adapter**:
   Post and delete across **X (v2 API)**, **Mastodon (v1 API)**, **Bluesky (AT Protocol / XRPC)**, **Misskey (Notes API)**, and **Threads (2-step container API)** through a single clean interface.
-- **DNS-Rebinding-Proof SSRF Protection**:
-  Validates destination addresses against private/internal IPv4 and IPv6 CIDR blocks (RFC1918, CGNAT, Loopback, Link-Local, Cloud Metadata, 6to4, IPv4-mapped IPv6). Resolves and **pins the IP address** directly into the Node.js socket TLS handshake (`lookup` hook), completely eliminating Time-Of-Check to Time-Of-Use (TOCTOU) DNS rebinding attacks.
+- **SSRF safeguards**:
+  Validates resolved IPv4 and IPv6 addresses against private and reserved ranges, then pins the validated address into the Node.js TLS socket lookup for the request. This reduces DNS-rebinding risk for the checked request; it does not restrict destinations to a provider allowlist or protect credentials sent to an untrusted public host.
 - **AES-256-GCM Credential Envelopes**:
   Built-in `v1.<iv>.<tag>.<ciphertext>` authenticated encryption helpers for securely storing OAuth tokens and app passwords at rest in your database.
 - **Dry-Run Simulation Mode**:

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import https from 'node:https';
+import dns from 'node:dns/promises';
 import { EventEmitter } from 'node:events';
 import { randomBytes } from 'node:crypto';
 import test from 'node:test';
@@ -284,15 +285,21 @@ test('countServiceCharacters fallbacks when Intl.Segmenter is absent', () => {
 });
 
 test('resolveSafeExternalUrl and assertSafeExternalUrl error handling', async () => {
-  // Valid URL passes assertSafeExternalUrl
-  const parsed = await assertSafeExternalUrl('https://mastodon.social/api/v1');
-  assert.equal(parsed.hostname, 'mastodon.social');
+  // Public IP literals avoid live DNS in this unit test.
+  const parsed = await assertSafeExternalUrl('https://8.8.8.8/api/v1');
+  assert.equal(parsed.hostname, '8.8.8.8');
 
   // Invalid URL format
   await assert.rejects(() => assertSafeExternalUrl('not a valid url'), /外部URLが不正/);
 
-  // Unresolvable domain
-  await assert.rejects(() => assertSafeExternalUrl('https://non-existent-domain-xyz-404-safe.org'), /ホストを解決できません/);
+  // Unresolvable domain, with DNS failure simulated rather than sent to a resolver.
+  const originalLookup = dns.lookup;
+  dns.lookup = async () => { throw Object.assign(new Error('not found'), { code: 'ENOTFOUND' }); };
+  try {
+    await assert.rejects(() => assertSafeExternalUrl('https://missing.invalid/path'), /ホストを解決できません/);
+  } finally {
+    dns.lookup = originalLookup;
+  }
 });
 
 test('fetchJson handles API error messages and non-JSON error payloads', async () => {
@@ -334,7 +341,8 @@ test('requestExternal performs safe HTTPS requests with size limit guard', async
       return req;
     };
 
-    const res = await requestExternal('https://mastodon.social/test', {
+    // Use a public literal so this unit test is deterministic and never depends on live DNS.
+    const res = await requestExternal('https://8.8.8.8/test', {
       method: 'POST',
       body: 'payload',
     });
@@ -359,7 +367,7 @@ test('requestExternal performs safe HTTPS requests with size limit guard', async
     };
 
     await assert.rejects(
-      () => requestExternal('https://mastodon.social/oversized'),
+      () => requestExternal('https://8.8.8.8/oversized'),
       /外部APIレスポンスが大きすぎます/
     );
   } finally {
